@@ -1,0 +1,218 @@
+\documentclass {article}
+\usepackage[usenames]{color}
+\usepackage{tikz}
+\usepackage{colortbl}
+\usepackage{ulem}
+\usepackage[pdfborder=0 0 0,colorlinks,linkcolor=black]{hyperref}
+\usepackage{verbatim}
+\usepackage[utf8]{inputenc}
+\usepackage[T1, T2A]{fontenc}
+\usepackage[english,russian]{babel}
+\usepackage{indentfirst}
+\usepackage{listings}
+\usepackage{titling}
+\usepackage{geometry}
+\geometry{pdftex, a4paper}
+\geometry{left=2.5cm, right=2.5cm, top = 2cm}
+\usepackage{caption}
+\DeclareCaptionFont{white}{\color{white}}
+\definecolor{mycol}{rgb}{0.98,0.92,0.9}
+\definecolor{mycol1}{rgb}{0.5,0.5,0.5}
+
+\DeclareCaptionFormat{listing}{\colorbox{mycol1}{\parbox{\textwidth}{#1#2#3}}}
+\captionsetup[lstlisting]{format=listing}
+\date{}
+\title{{Ввод, вывод. Файлы}}
+\begin{document}
+\lstset{%
+language=C++,            
+basicstyle=\small\ttfamily, 
+numbers=left,       
+numberstyle=\tiny,       
+stepnumber=1,           
+numbersep=5pt,            
+backgroundcolor=\color{mycol},
+showspaces=false,  
+showstringspaces=false,  
+showtabs=false,     
+keywordstyle=\bfseries\color{green!40!black},
+identifierstyle=\color{blue},
+stringstyle=\color{orange},
+frame=single,    
+tabsize=2,         
+captionpos=t,       
+breaklines=true,         
+breakatwhitespace=false,
+escapeinside={\%*}{*)}   
+}
+\maketitle
+\section{Введение}
+Итак, программисты С++ знают, что память нужно освобождать. Желательно всегда. И они знают, что если где-то пишется new, обязательно должен быть соответствующий delete. Но ручные манипуляции с памятью могут быть чреваты, например, следующими ошибками:
+\begin{itemize}
+\item утечки памяти;
+\item разыменовывание нулевого указателя, либо обращение к неициализированной области памяти;
+\item удаление уже удаленного объекта;
+\end{itemize}
+Существует техника управления ресурсами посредством локальных объектов, называемая RAII. То есть, при получении какого-либо ресурса, его инициализируют в конструкторе, а, поработав с ним в функции, корректно освобождают в деструкторе. Ресурсом может быть что угодно, к примеру файл, сетевое соединение, а в нашем случае блок памяти. Вот простейший пример:
+\begin{lstlisting}[caption=Пример]
+class VideoBuffer {
+    int *myPixels;
+public:
+    VideoBuffer() {
+        myPixels = new int[640 * 480];
+    }
+    void makeFrame() { /* work with rastr */ }
+    ~VideoBuffer() {
+        delete [] myPixels;
+    }
+};
+int game() {
+    VideoBuffer screen;
+    screen.makeFrame();
+}
+\end{lstlisting}
+Это удобно: по выходу из функции нам не нужно заботиться об освобождении буфера, так как для объекта screen вызовется деструктор, который в свою очередь освободит инкапсулированный в себе массив пикселей. Конечно, можно написать и так:
+\begin{lstlisting}[caption=Пример]
+int game() {
+    int *myPixels = new int[640 * 480];
+    // some work
+    delete [] myPixels;
+}
+\end{lstlisting}
+В принципе, никакой разницы, но представим себе такой код:
+\begin{lstlisting}[caption=Пример]
+int game() {
+    int *myPixels = new int[640 * 480];
+    // some work
+    if (someCondition)
+        return 1;        
+    // some work
+    if (someCondition)
+        return 4;        
+    // end of work
+    delete [] myPixels;
+}
+\end{lstlisting}
+Придется в каждой ветке выхода из функции писать delete [], либо вызывать какие-либо дополнительные функции деинициализации. А если выделений памяти много, либо они происходят в разных частях функции? Уследить за всем этим будет все сложнее и сложнее. Ок, будем использовать RAII, в конструкторах инициализировать память, в деструкторе освобождать. И пусть поля нашего класса будут указателями на участки динамической памяти:
+\begin{lstlisting}[caption=Пример]
+class Foo {
+    int *data1;
+    double *data2;
+    char *data3;
+public:
+    Foo() {
+        data1 = new int(5);
+        ...
+    }
+    ~Foo() {
+        delete data1;
+        ...
+    }
+}
+\end{lstlisting}
+Теперь представьте, что полей не 3, а 30, а значит в деструкторе придется для всех них вызывать delete. А если мы второпях добавим новое поле, но забудем его убить в деструкторе, то последствия будут негативными. В итоге получается класс, нагруженный операциями выделения/освобождения памяти, да еще и непонятно, все ли было правильно удалено.\\\\
+Поэтому предлагается использовать умные указатели: это объекты, которые хранят указатели на динамически аллоцированные участки памяти произвольного типа. Причем они автоматически очищают память по выходу из области видимости.\\\\
+Сначала рассмотрим то, как они выглядят в С++, затем перейдем к обзору некоторых распространенных типов умных указателей.
+\section{Простейший smart pointer}
+\begin{lstlisting}[caption=Пример]
+// our smart pointer class
+template <typename T>
+class smart_pointer {
+    T *m_obj;
+public:
+    // some object for this class
+    smart_pointer(T *obj)
+        : m_obj(obj)
+    { }
+    // On leaving the field of view, we will destroy this object
+    ~smart_pointer() {
+        delete m_obj;
+    }
+    // overdrive operators<
+    // Selector. Allows access to data of type T by means of "arrow"
+    T* operator->() { return m_obj; }
+    // With the help of such an operator, we can dereference the pointer
+    //and get a reference to the object that it stores
+    T& operator* () { return *m_obj; }
+}
+int test {
+    // We return myClass to the smart pointer
+    smart_pointer<MyClass> pMyClass(new MyClass(/*params*/);    
+    // We address to a method of class MyClass by means of the selector
+    pMyClass->something();  
+    //Assume that for our class there is a function to output it to ostream
+    // This function usually gets a reference to an object by one 
+    //of the parameters,
+    //which should be displayed
+    std::cout << *pMyClass << std::endl;    
+    // on the output of the skoupe, the MyClass object will be deleted
+}
+\end{lstlisting}
+Понятно, что наш смарт пойнтер не лишен недостатков (например, как хранить в нем массив?), но он в полной мере реализует идиому RAII. Он ведет себя так же, как и обычный указатель (благодаря перегруженным операторам), причем нам не нужно заботиться об освобождении памяти: все будет сделано автоматически. По желанию к перегруженным операторам можно добавить const, гарантировав неизменность данных, на которые ссылается указатель.
+Теперь, если вы поняли, что получаете определенные преимущества, при использовании таких указателей, рассмотрим их конкретные реализации. Если вам не нравится эта идея, то все равно, попробуйте использовать их в какой-нибудь своей маленькой программке.
+Итак, наши смарт-пойнтеры:
+\begin{itemize}
+\item boost::scope\_ptr;
+\item std::auto\_ptr;
+\item std::tr1::shared\_ptr;
+\end{itemize}
+\section{boost::scoped\_ptr}
+Он находится в библиотеке буст.
+Реализация простая и понятная, практически идентичная нашей, за несколькими исключениями, одно из них: этот пойнтер не может быть скопирован (то есть у него приватный конструктор копирования и оператор присваивания). Поясню на примере:
+\begin{lstlisting}[caption=Пример]
+#include <boost/scoped_ptr.hpp>
+int test() {
+    boost::scoped_ptr<int> p1(new int(6));
+    boost::scoped_ptr<int> p2(new int(1));    
+    p1 = p2; // we cant!
+}
+\end{lstlisting}
+Оно и понятно, если бы было разрешено присваивание, то и p1 и p2 будут указывать на одну и ту же область памяти. А по выходу из функции оба удалятся. Что будет? Никто не знает. Соответственно, этот пойнтер нельзя передавать и в функции.\\\\
+Тогда зачем он нужен? Советую применять его как указатель-обертка для каких-либо данных, которые выделяются динамически в начале функции и удаляются в конце, чтобы избавить себя от головной боли по поводу корректной очистки ресурсов.
+\section{std::auto\_ptr}
+Чуть-чуть улучшенный вариант предыдущего, к тому же он есть в стандартной библиотеке. У него есть оператор присваивания и конструктор-копировщик, но работают они несколько необычно.
+\begin{lstlisting}[caption=Пример]
+#include <memory>
+int test() {
+    std::auto_ptr<MyObject> p1(new MyObject);
+    std::auto_ptr<MyObject> p2;    
+    p2 = p1;
+}
+\end{lstlisting}
+Теперь при присваивании в p2 будет лежать указатель на MyObject (который мы создавали для p1), а в p1 не будет ничего. То есть p1 теперь обнулен. Это так называемая семантика перемещения. Кстати, оператор копирования поступает таким же образом.
+Зачем это нужно? Ну например у вас есть функция, которая должна создавать какой-то объект:
+\begin{lstlisting}[caption=Пример]
+    std::auto_ptr<MyObject> giveMeMyObject();
+\end{lstlisting}
+Это означает, что функция создает новый объект типа MyObject и отдает его вам в распоряжение. Понятней станет, если эта функция сама является членом класса (допустим Factory): вы уверены, что этот класс (Factory) не хранит в себе еще один указатель на новый объект. Объект ваш и указатель на него один.
+В силу такой необычной семантики auto\_ptr нельзя использовать в контейнерах STL. Но у нас есть shared\_ptr.
+\section{std::shared\_ptr }
+Умный указатель с подсчетом ссылок. Что это значит. Это значит, что где-то есть некая переменная, которая хранит количество указателей, которые ссылаются на объект. Если эта переменная становится равной нулю, то объект уничтожается. Счетчик инкрементируется при каждом вызове либо оператора копирования либо оператора присваивания. Так же у shared\_ptr есть оператор приведения к bool, что в итоге дает нам привычный синтаксис указателей, не заботясь об освобождении памяти.
+\begin{lstlisting}[caption=Пример]
+#include <memory> 
+#include <iostream>
+int test() {
+    std::shared_ptr<MyObject> p1(new MyObject);
+    std::shared_ptr<MyObject> p2;    
+    p2 = p1;    
+    if (p2)
+        std::cout << "Hello, world!\n";
+}
+\end{lstlisting}
+Теперь и p2 и p1 указывают на один объект, а счетчик ссылок равен 2, По выходу из скоупа счетчик обнуляется, и объект уничтожается. Мы можем передавать этот указатель в функцию:
+\begin{lstlisting}[caption=Пример]
+int test(std::shared_ptr<MyObject> p1) {
+    // doing something
+}
+\end{lstlisting}
+Заметьте, если вы передаете указатель по ссылке, то счетчик не будет увеличен. Вы должны быть уверены, что объект MyObject будет жив, пока будет выполняться функция test.\\\\
+\newline
+\section{Источники}
+\begin{itemize}
+\item \url{https://www.boost.org/doc/libs/1_39_0/libs/smart_ptr/scoped_ptr.htm}
+\item \url{https://habr.com/post/140222/}
+\item \url{https://tproger.ru/problems/write-a-class-for-smart-pointer/}
+\end{itemize}
+\newpage
+\tableofcontents
+\end{document}
