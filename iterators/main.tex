@@ -1,0 +1,110 @@
+\documentclass {article}
+\usepackage[usenames]{color}
+\usepackage{tikz}
+\usepackage{colortbl}
+\usepackage{ulem}
+\usepackage[pdfborder=0 0 0,colorlinks,linkcolor=black]{hyperref}
+\usepackage{verbatim}
+\usepackage[utf8]{inputenc}
+\usepackage[T1, T2A]{fontenc}
+\usepackage[english,russian]{babel}
+\usepackage{indentfirst}
+\usepackage{listings}
+\usepackage{titling}
+\usepackage{geometry}
+\geometry{pdftex, a4paper}
+\geometry{left=2.5cm, right=2.5cm, top = 2cm}
+\usepackage{caption}
+\DeclareCaptionFont{white}{\color{white}}
+\definecolor{mycol}{rgb}{0.98,0.92,0.9}
+\definecolor{mycol1}{rgb}{0.5,0.5,0.5}
+\frenchspacing   
+
+\DeclareCaptionFormat{listing}{\colorbox{mycol1}{\parbox{\textwidth}{#1#2#3}}}
+\captionsetup[lstlisting]{format=listing}
+\lstset{%
+extendedchars=\true
+language=C++,            
+basicstyle=\small\ttfamily, 
+numbers=left,       
+numberstyle=\tiny,       
+stepnumber=1,           
+numbersep=5pt,            
+backgroundcolor=\color{mycol},
+showspaces=false,  
+showstringspaces=false,  
+showtabs=false,     
+keywordstyle=\bfseries\color{green!40!black},
+identifierstyle=\color{blue},
+stringstyle=\color{orange},
+frame=single,    
+tabsize=2,         
+captionpos=t,       
+breaklines=true, 
+keepspaces = true,
+breakatwhitespace=false,
+escapeinside={\%*}{*)}   
+}
+\date{}
+\title{{STL. Итераторы}}
+\begin{document}
+\maketitle
+\section{Итератор}
+Объект, который синтаксически ведет себя как указатель (определены операторы ++, --, *, -> ).
+Универсальный способ перебора элементов контейнеров в STL - перебор с помощью итератора.
+Все контейнеры имеют функции, которые возвращают итераторы на первый элемент и на элемент, следующий за последним:
+\begin{lstlisting}[caption=Example]
+vector< int > v;
+vector< int >::iterator begin = v.begin();
+vector< int >::iterator end = v.end();
+\end{lstlisting}
+Для vector и deque реализована арифметика, аналогичная арифметике указателей:
+\begin{lstlisting}[caption=Example]
+int i = *( v.begin() + 5 );
+list< int > l;
+list< int >::iterator it = l.begin();
+for( ; it != l.end(); ++it )
+    cout << *it; Получение объекта по итератору таким способом работает для любого типа контейнеров
+list< int >::const_iterator cit = l.begin(); Такой итератор не позволяет менять данные, на которые он указывает
+\end{lstlisting}\\
+Итераторы позволяют задать позицию в контейнере:
+\begin{figure}[h!]
+\centering
+\includegraphics[width=150px, height=50px]{it.png}
+\caption{}
+\end{figure}
+\begin{lstlisting}[caption=Example]
+//Итератор it принадлежит контейнеру v
+v.erase( it );// Удаление элемента, на который указывает итератор it
+v.insert( it, 5 ); // Вставка элемента 5 на позицию, на которую указывает итератор it
+v.insert( it1, 6 ); // Вставка элемента 6 между 2 и 3
+
+*it1 == 3;
+*it2 == 7;
+*bit == 2; //bit - обратный итератор
+// insert( it1, 6 ) и insert( bit, 6 ) дадут одинаковый результат
+// Обратный итератор может быть получен следующим образом:
+vector< int >::reverse_iterator ri_b = v.rbegin();
+vector< int >::reverse_iterator ri_e = v.rend();
+// В случае обратного итератора меняется направление прохода по контейнеру:
+// оператор ++ передвигает итератор на позицию влево, а оператор -- - на позиуию вправо
+erase( it1, it2 ); // Два итератора задают множество элементов, которые будут удалены
+insert( it, p, q ); // Итераторы p и q задают последовательность элементов
+// другого контейнера, из которого идет вставка элементов
+// Итераторы обязательно должны принадлежать одному контейнеру
+\end{lstlisting}\\
+Возможна инициализация нового контейнера элементами существующего. Последовательность задается с помощью двух итераторов:
+\begin{lstlisting}[caption=Example]
+vector< int > v; // Контейнер, элементами которого инициализируется новый контейнер
+vector< double > w( v.begin(), v.end() );
+\end{lstlisting}
+\newpage
+\section{Источники}
+\begin{itemize}
+\item \url{http://www.amse.ru/courses/cpp2/2011_02_21.html}
+\item \url{https://habr.com/post/122283/}
+\item \url{https://habr.com/post/265491/}
+\end{itemize}
+\newpage
+\tableofcontents
+\end{document}
